@@ -1,42 +1,138 @@
 /**
- * STUB — Slice A contract.
+ * Claude subprocess driver.
  *
- * Slice A owns `subscribeToClaude` and `sendUserTurn`. Until that slice
- * lands on `main`, this file provides a fixture-driven stub that yields
- * the canned event sequence from `src/__fixtures__/events.ts`. The
- * integration step (post-merge of all slices) replaces this stub with the
- * real implementation backed by the `claude` subprocess.
+ * Spawns `claude --print --verbose --input-format stream-json
+ * --output-format stream-json` via Bun.spawn and exposes an async-iterable
+ * event stream plus a `sendUserTurn` writer.
  *
- * The exported signatures here are the contract — slice A must match.
+ * Design notes:
+ * - stdin MUST be a pipe, not a file redirect. Passing a file to claude's
+ *   stdin silently produces no output and exits 0 — a painful gotcha
+ *   documented in docs/stream-json-findings.md.
+ * - `SpawnFn` is injectable so tests can pipe fixture bytes through the real
+ *   parser without touching the live binary. Production callers omit it.
+ * - `close()` closes stdin (signals EOF to claude) and awaits the process
+ *   exit. The process exits cleanly ~250ms after stdin close per the findings.
  */
+import { parseNdjsonStream } from "./event-parser.ts";
+import type { ClaudeEvent, UserTurn } from "./types/events.ts";
 
-import { fixtureSession } from "./__fixtures__/events.ts";
-import type { ClaudeEvent } from "./types/events.ts";
+export interface SpawnResult {
+  stdout: ReadableStream<Uint8Array>;
+  stdin: WritableStream<Uint8Array>;
+  exited: Promise<number>;
+  kill: () => void;
+}
 
-export interface SubscribeArgs {
-  /** Working directory passed to `claude --cwd`. Defaults to process.cwd(). */
+export type SpawnFn = (cmd: string[], opts: { cwd?: string }) => SpawnResult;
+
+export interface SubscribeOptions {
+  /** Working directory for the claude process. Defaults to process.cwd(). */
   cwd?: string;
-  /** Additional flags forwarded to the `claude` CLI. */
+  /** Extra CLI arguments appended after the required flags. */
   extraArgs?: string[];
+  /**
+   * Injectable spawn function — omit in production, pass a mock in tests.
+   * See module header comment for rationale.
+   */
+  spawnFn?: SpawnFn;
 }
 
-/**
- * Async iterable of typed `ClaudeEvent`s. Real impl reads stream-json
- * from claude's stdout; stub yields fixtures synchronously with a tiny
- * delay so an Ink consumer sees them as separate ticks.
- */
-export async function* subscribeToClaude(_args: SubscribeArgs = {}): AsyncIterable<ClaudeEvent> {
-  for (const event of fixtureSession) {
-    // Yield each event on a new microtask so the renderer can paint.
-    await Promise.resolve();
-    yield event;
+export interface ClaudeSubscription {
+  events: AsyncIterable<ClaudeEvent>;
+  sendUserTurn: (text: string) => void;
+  close: () => Promise<number>;
+}
+
+const REQUIRED_ARGS = [
+  "--print",
+  "--verbose",
+  "--input-format",
+  "stream-json",
+  "--output-format",
+  "stream-json",
+];
+
+export function subscribeToClaude(opts: SubscribeOptions = {}): ClaudeSubscription {
+  const { cwd, extraArgs = [], spawnFn } = opts;
+
+  const spawn = spawnFn ?? defaultSpawn;
+  const spawnOpts = cwd !== undefined ? { cwd } : {};
+  const proc = spawn(["claude", ...REQUIRED_ARGS, ...extraArgs], spawnOpts);
+
+  const encoder = new TextEncoder();
+  let stdinWriter: WritableStreamDefaultWriter<Uint8Array> | null = proc.stdin.getWriter();
+
+  function sendUserTurn(text: string): void {
+    if (stdinWriter === null) return;
+    const turn: UserTurn = {
+      type: "user",
+      message: {
+        role: "user",
+        content: [{ type: "text", text }],
+      },
+    };
+    const line = `${JSON.stringify(turn)}\n`;
+    // Fire-and-forget write; errors surface as unhandled promise rejections
+    // which is acceptable for a stream writer (the process exiting will close
+    // the stream cleanly).
+    stdinWriter.write(encoder.encode(line)).catch(() => undefined);
   }
+
+  async function close(): Promise<number> {
+    if (stdinWriter !== null) {
+      try {
+        await stdinWriter.close();
+      } catch {
+        // Already closed — ignore.
+      }
+      stdinWriter = null;
+    }
+    return proc.exited;
+  }
+
+  return {
+    events: parseNdjsonStream(proc.stdout),
+    sendUserTurn,
+    close,
+  };
 }
 
-/**
- * Forward a typed user turn to claude's stdin. Stub is a no-op; the real
- * impl writes `{"type":"user", ...}\n` to the subprocess.
- */
-export function sendUserTurn(_text: string): void {
-  // Stub. Slice A wires the actual stdin write.
+function defaultSpawn(cmd: string[], opts: { cwd?: string }): SpawnResult {
+  const bunOpts =
+    opts.cwd !== undefined
+      ? {
+          stdin: "pipe" as const,
+          stdout: "pipe" as const,
+          stderr: "inherit" as const,
+          cwd: opts.cwd,
+        }
+      : { stdin: "pipe" as const, stdout: "pipe" as const, stderr: "inherit" as const };
+  const proc = Bun.spawn(cmd, bunOpts);
+
+  // Wrap Bun's ReadableStream and WritableStream in the standard Web streams
+  // API shapes that SpawnResult declares.
+  const stdout = proc.stdout as ReadableStream<Uint8Array>;
+  // Bun.spawn returns a FileSink for stdin when stdin: "pipe".
+  // Wrap it in a WritableStream so the surface is consistent.
+  const sink = proc.stdin;
+
+  const stdin = new WritableStream<Uint8Array>({
+    async write(chunk) {
+      await sink.write(chunk);
+    },
+    async close() {
+      await sink.end();
+    },
+    abort() {
+      sink.end();
+    },
+  });
+
+  return {
+    stdout,
+    stdin,
+    exited: proc.exited,
+    kill: () => proc.kill(),
+  };
 }

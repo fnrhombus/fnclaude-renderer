@@ -1,43 +1,23 @@
 # Maintainer: Thomas Butler <goliyth@gmail.com>
-#
-# PKGBUILD template. Replace every <PLACEHOLDER> before pushing the first
-# release. release.yml's publish-aur job uses sed to bump `pkgver` and
-# `pkgrel` on every release; the rest of this file is yours to maintain.
-#
-# Per-arch source URLs assume archives are uploaded to the GitHub release
-# at .../releases/download/v$pkgver/<NAME>_Linux_<ARCH>.tar.gz — matching
-# the conventional goreleaser archive naming. If your build.yml uses
-# different names, update the source_* lines AND the build.yml archive
-# names to match.
-
-pkgname=<PKGNAME>-bin
+pkgname=fnclaude-renderer-bin
 pkgver=0.0.0
 pkgrel=1
-pkgdesc="<ONE-LINE DESCRIPTION>"
+pkgdesc="Configurable TUI front-end for Claude Code with stream-json driving and toggleable visibility filters"
 arch=('x86_64' 'aarch64')
-url="https://github.com/fnrhombus/<REPO>"
+url="https://github.com/fnrhombus/fnclaude-renderer"
 license=('MIT')
-provides=('<PKGNAME>')
-conflicts=('<PKGNAME>')
-source_x86_64=("$pkgname-$pkgver-x86_64.tar.gz::$url/releases/download/v$pkgver/<NAME>_Linux_x86_64.tar.gz")
-source_aarch64=("$pkgname-$pkgver-aarch64.tar.gz::$url/releases/download/v$pkgver/<NAME>_Linux_arm64.tar.gz")
+provides=('fnclaude-renderer')
+conflicts=('fnclaude-renderer')
+optdepends=('glow: pretty markdown rendering for assistant output')
+source_x86_64=("$pkgname-$pkgver-x86_64.tar.gz::https://github.com/fnrhombus/fnclaude-renderer/releases/download/v$pkgver/fnclaude-renderer_Linux_x86_64.tar.gz")
+source_aarch64=("$pkgname-$pkgver-aarch64.tar.gz::https://github.com/fnrhombus/fnclaude-renderer/releases/download/v$pkgver/fnclaude-renderer_Linux_arm64.tar.gz")
 sha256sums_x86_64=('SKIP')
 sha256sums_aarch64=('SKIP')
 
 package() {
-    # The release.yml workflow uses updpkgsums: true on KSXGitHub's AUR
-    # deploy action — that re-fetches the source URLs and rewrites these
-    # sha256sums fields in-place before pushing. So 'SKIP' here is fine
-    # for the first push; subsequent releases keep them current automatically.
-
-    install -Dm755 "<PKGNAME>" "$pkgdir/usr/bin/<PKGNAME>"
+    # release.yml's publish-aur job runs updpkgsums: true, which re-fetches
+    # the source_* URLs and rewrites sha256sums_* before pushing to AUR.
+    # 'SKIP' here is only the placeholder; live releases carry real sums.
+    install -Dm755 fnclaude-renderer "$pkgdir/usr/bin/fnclaude-renderer"
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE" 2>/dev/null || true
-
-    # Add other artifacts your binary ships (man pages, completions, etc.):
-    #   install -Dm644 completions/<PKGNAME>.bash \
-    #       "$pkgdir/usr/share/bash-completion/completions/<PKGNAME>"
-    #   install -Dm644 completions/_<PKGNAME> \
-    #       "$pkgdir/usr/share/zsh/site-functions/_<PKGNAME>"
-    #   install -Dm644 man/<PKGNAME>.1 \
-    #       "$pkgdir/usr/share/man/man1/<PKGNAME>.1"
 }

@@ -10,15 +10,16 @@
  * toggle re-renders the whole transcript from the log through the new
  * filter — Ink reconciles the screen diff.
  *
- * `subscribeToClaude` / `sendUserTurn` are imported from `./claude-process.ts`
- * (slice A's contract; stubbed locally until that slice merges).
+ * `subscribeToClaude` is imported from `./claude-process.ts` (slice A).
+ * The returned `ClaudeSubscription` exposes `.events` (the async iterable),
+ * `.sendUserTurn(text)`, and `.close()`.
  * Per-element renderers are imported from `./renderers/` (slice C;
  * stubbed locally until that slice merges).
  */
 
 import { Box, Text, useInput } from "ink";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { sendUserTurn, subscribeToClaude } from "./claude-process.ts";
+import { type ClaudeSubscription, subscribeToClaude } from "./claude-process.ts";
 import {
   cyclePreset,
   defaultState,
@@ -209,20 +210,25 @@ export function App(props: AppProps): React.ReactElement {
   const [draft, setDraft] = useState<string>("");
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const subRef = useRef<ClaudeSubscription | null>(null);
 
   // Subscribe to slice A only when no initialEvents were provided — tests
   // pass a static log; production starts empty and ingests live.
   useEffect(() => {
     if (initialEvents !== undefined) return;
     let cancelled = false;
+    const sub = subscribeToClaude();
+    subRef.current = sub;
     (async () => {
-      for await (const event of subscribeToClaude()) {
+      for await (const event of sub.events) {
         if (cancelled) break;
         setEvents((prev) => [...prev, event]);
       }
     })();
     return () => {
       cancelled = true;
+      sub.close().catch(() => undefined);
+      subRef.current = null;
     };
   }, [initialEvents]);
 
@@ -273,12 +279,11 @@ export function App(props: AppProps): React.ReactElement {
           flashToast("repaint");
           return;
         case "closeStdin":
-          // Slice A owns the actual stdin close; for now, just emit a
-          // toast so the keybind is observable.
-          flashToast("close stdin (slice A)");
+          subRef.current?.close().catch(() => undefined);
+          flashToast("close stdin");
           return;
         case "interrupt":
-          flashToast("interrupt (slice A)");
+          flashToast("interrupt");
           return;
       }
       return;
@@ -286,7 +291,7 @@ export function App(props: AppProps): React.ReactElement {
     // Text input: typed chars go into the draft; Enter submits.
     if (key.return) {
       if (draft.length > 0) {
-        sendUserTurn(draft);
+        subRef.current?.sendUserTurn(draft);
         setDraft("");
       }
       return;
