@@ -1,6 +1,6 @@
 {
   "name": "fnclaude-renderer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "Configurable TUI front-end for Claude Code with stream-json driving, toggleable visibility filters, and glow-piped markdown.",
