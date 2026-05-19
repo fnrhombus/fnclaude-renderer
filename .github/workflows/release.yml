@@ -36,19 +36,21 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Create GitHub release
+      - name: Attach dist artifacts to GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          # --generate-notes pulls release notes from commits + PRs since the
-          # previous tag. release-please's CHANGELOG.md is authoritative on
-          # the repo side; this is the GitHub-side rendering.
-          gh release create "$TAG" dist/* \
+          # release-please-action created the release itself when it
+          # pushed the tag (skip-github-release defaults to false), so
+          # the release already exists with release-please's CHANGELOG
+          # rendering. We just upload the build artifacts onto it.
+          # `--clobber` lets re-runs overwrite if a previous attempt
+          # left partial uploads.
+          gh release upload "$TAG" dist/* \
             --repo "$GITHUB_REPOSITORY" \
-            --title "$TAG" \
-            --generate-notes
+            --clobber
 
   # Push the AUR PKGBUILD update. Requires the dist artifacts to be live on
   # the GitHub release (gh-release dependency) because updpkgsums fetches
