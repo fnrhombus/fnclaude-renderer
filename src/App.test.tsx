@@ -45,12 +45,13 @@ describe("<App />", () => {
     instance.unmount();
   });
 
-  test("ingests events and shows Bash header (always-shown)", async () => {
+  test("ingests events and shows Bash command (input is `show` in normal)", async () => {
     const instance = render(<App initialEvents={fixtureSession} />);
     await flush();
     const frame = instance.lastFrame() ?? "";
-    // Tool-call header is always shown regardless of filter state.
-    expect(frame).toContain("Bash");
+    // Bash.input default in `normal` is `show` — slice C's BashInput
+    // renders the command with a "$ " prefix.
+    expect(frame).toContain("$ ls -la");
     // Assistant text is always shown.
     expect(frame).toContain("Listing files now.");
     instance.unmount();
@@ -60,8 +61,8 @@ describe("<App />", () => {
     const instance = render(<App initialEvents={fixtureSession} />);
     await flush();
     const frame = instance.lastFrame() ?? "";
-    // Bash.output default in `normal` is `hide` — stub renderer omits.
-    expect(frame).not.toContain("Bash.output:");
+    // Bash.output default in `normal` is `hide` — BashOutput renders null.
+    expect(frame).not.toContain("total 0");
     instance.unmount();
   });
 
@@ -79,7 +80,7 @@ describe("<App />", () => {
     );
     await flush();
     // Sanity: hidden before toggle.
-    expect(instance.lastFrame() ?? "").not.toContain("Bash.output:");
+    expect(instance.lastFrame() ?? "").not.toContain("total 0");
     expect(dispatch).not.toBeNull();
 
     // Simulate Alt+3 → toggle Bash.output (was `hide` in `normal`,
@@ -92,7 +93,6 @@ describe("<App />", () => {
 
     const after = instance.lastFrame() ?? "";
     // Repaint: past Bash output content now visible.
-    expect(after).toContain("Bash.output:");
     expect(after).toContain("total 0");
     // Override count surfaces in the status line.
     expect(after).toContain("1 override");

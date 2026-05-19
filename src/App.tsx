@@ -29,25 +29,21 @@ import {
 } from "./filter-state.ts";
 import { type Key, dispatchKey } from "./keybinds.ts";
 import {
-  AssistantTextStub,
-  BashInputStub,
-  BashOutputStub,
-  EditDiffStub,
-  ErrorStub,
-  ReadContentStub,
-  TaskNestedStub,
-  ThinkingStub,
-  ToolHeaderStub,
-  WriteContentStub,
-} from "./renderers/index.tsx";
+  ErrorRenderer,
+  ResultRenderer,
+  TextRenderer,
+  ThinkingRenderer,
+  ToolResultRenderer,
+  ToolUseRenderer,
+} from "./renderers/index.ts";
 import type {
   AssistantEvent,
   ClaudeEvent,
-  ContentBlock,
+  ElementId,
   FilterState,
   ResultEvent,
-  ToolUseBlock,
   UserEvent,
+  Visibility,
 } from "./types/events.ts";
 
 const TOAST_DURATION_MS = 2000;
@@ -67,93 +63,36 @@ export interface AppProps {
   testInputBus?: (handler: (input: string, key: Key) => void) => void;
 }
 
-/**
- * Map an in-band tool name → its element-specific renderer (input side).
- * The header is always rendered separately and unfiltered.
- */
-function ToolUseElement({
-  block,
-  filter,
-}: { block: ToolUseBlock; filter: FilterState }): React.ReactElement | null {
-  switch (block.name) {
-    case "Bash": {
-      const visibility = resolve("Bash.input", filter);
-      return <BashInputStub block={block} visibility={visibility} />;
-    }
-    case "Edit": {
-      const visibility = resolve("Edit.diff", filter);
-      return <EditDiffStub block={block} visibility={visibility} />;
-    }
-    case "Write": {
-      const visibility = resolve("Write.content", filter);
-      return <WriteContentStub block={block} visibility={visibility} />;
-    }
-    case "Task": {
-      const visibility = resolve("Task.nested", filter);
-      return <TaskNestedStub block={block} visibility={visibility} />;
-    }
-    default:
-      // Tool we don't have a dedicated element for — header alone.
-      return null;
-  }
-}
-
-/**
- * Map a tool_result block to its element-specific renderer. We need the
- * matching `tool_use` to know which element (Bash.output vs Read.content)
- * the result belongs to — pass the resolved tool name through.
- */
-function ToolResultElement({
-  block,
-  toolName,
-  filter,
-}: {
-  block: Extract<ContentBlock, { type: "tool_result" }>;
-  toolName: string | undefined;
-  filter: FilterState;
-}): React.ReactElement | null {
-  if (block.is_error === true) {
-    const visibility = resolve("errors", filter);
-    const body =
-      typeof block.content === "string" ? block.content : block.content.map((c) => c.text).join("");
-    return <ErrorStub message={body} visibility={visibility} />;
-  }
-  switch (toolName) {
-    case "Bash": {
-      const visibility = resolve("Bash.output", filter);
-      return <BashOutputStub block={block} visibility={visibility} />;
-    }
-    case "Read": {
-      const visibility = resolve("Read.content", filter);
-      return <ReadContentStub block={block} visibility={visibility} />;
-    }
-    default:
-      return null;
-  }
+interface ToolCallInfo {
+  name: string;
+  input: Record<string, unknown>;
 }
 
 function AssistantRender({
   event,
-  filter,
-}: { event: AssistantEvent; filter: FilterState }): React.ReactElement {
+  visibilityFor,
+}: {
+  event: AssistantEvent;
+  visibilityFor: (id: ElementId) => Visibility;
+}): React.ReactElement {
   return (
     <Box flexDirection="column">
       {event.message.content.map((block, idx) => {
         const k = `${event.uuid}-${idx}`;
         if (block.type === "text") {
-          return <AssistantTextStub key={k} block={block} />;
+          return <TextRenderer key={k} text={block.text} />;
         }
         if (block.type === "thinking") {
-          const visibility = resolve("thinking", filter);
-          return <ThinkingStub key={k} block={block} visibility={visibility} />;
+          return (
+            <ThinkingRenderer
+              key={k}
+              thinking={block.thinking}
+              visibility={visibilityFor("thinking")}
+            />
+          );
         }
         if (block.type === "tool_use") {
-          return (
-            <Box key={k} flexDirection="column">
-              <ToolHeaderStub block={block} />
-              <ToolUseElement block={block} filter={filter} />
-            </Box>
-          );
+          return <ToolUseRenderer key={k} block={block} visibilityFor={visibilityFor} />;
         }
         return null;
       })}
@@ -163,12 +102,12 @@ function AssistantRender({
 
 function UserRender({
   event,
-  toolNameById,
-  filter,
+  toolCallById,
+  visibilityFor,
 }: {
   event: UserEvent;
-  toolNameById: Map<string, string>;
-  filter: FilterState;
+  toolCallById: Map<string, ToolCallInfo>;
+  visibilityFor: (id: ElementId) => Visibility;
 }): React.ReactElement {
   const content = event.message.content;
   if (typeof content === "string") {
@@ -182,8 +121,16 @@ function UserRender({
           return <Text key={k}>{block.text}</Text>;
         }
         if (block.type === "tool_result") {
-          const toolName = toolNameById.get(block.tool_use_id);
-          return <ToolResultElement key={k} block={block} toolName={toolName} filter={filter} />;
+          const call = toolCallById.get(block.tool_use_id);
+          return (
+            <ToolResultRenderer
+              key={k}
+              block={block}
+              toolName={call?.name ?? ""}
+              {...(call?.input ? { toolInput: call.input } : {})}
+              visibilityFor={visibilityFor}
+            />
+          );
         }
         return null;
       })}
@@ -193,14 +140,13 @@ function UserRender({
 
 function ResultRender({
   event,
-  filter,
-}: { event: ResultEvent; filter: FilterState }): React.ReactElement {
+}: {
+  event: ResultEvent;
+}): React.ReactElement {
   if (event.is_error) {
-    const visibility = resolve("errors", filter);
-    return <ErrorStub message={event.result} visibility={visibility} />;
+    return <ErrorRenderer message={event.result} />;
   }
-  // result.result is always-shown content.
-  return <Text>{event.result}</Text>;
+  return <ResultRenderer event={event} />;
 }
 
 export function App(props: AppProps): React.ReactElement {
@@ -232,19 +178,25 @@ export function App(props: AppProps): React.ReactElement {
     };
   }, [initialEvents]);
 
-  // Build a tool_use_id → tool name index for tool_result dispatch.
+  // Build a tool_use_id → { name, input } index for tool_result dispatch.
   // Re-derived from the log on every render; cheap, log is in-memory.
-  const toolNameById = useMemo(() => {
-    const m = new Map<string, string>();
+  // Slice C's ToolResultRenderer needs the original `input` for results
+  // that summarize against the call (e.g. Read.content's file_path).
+  const toolCallById = useMemo(() => {
+    const m = new Map<string, ToolCallInfo>();
     for (const event of events) {
       if (event.type === "assistant") {
         for (const block of event.message.content) {
-          if (block.type === "tool_use") m.set(block.id, block.name);
+          if (block.type === "tool_use") {
+            m.set(block.id, { name: block.name, input: block.input });
+          }
         }
       }
     }
     return m;
   }, [events]);
+
+  const visibilityFor = useMemo(() => (id: ElementId) => resolve(id, filter), [filter]);
 
   const flashToast = (msg: string) => {
     setToast(msg);
@@ -340,15 +292,20 @@ export function App(props: AppProps): React.ReactElement {
           const key =
             "uuid" in event && event.uuid ? event.uuid : `${event.type}-${events.indexOf(event)}`;
           if (event.type === "assistant") {
-            return <AssistantRender key={key} event={event} filter={filter} />;
+            return <AssistantRender key={key} event={event} visibilityFor={visibilityFor} />;
           }
           if (event.type === "user") {
             return (
-              <UserRender key={key} event={event} toolNameById={toolNameById} filter={filter} />
+              <UserRender
+                key={key}
+                event={event}
+                toolCallById={toolCallById}
+                visibilityFor={visibilityFor}
+              />
             );
           }
           if (event.type === "result") {
-            return <ResultRender key={key} event={event} filter={filter} />;
+            return <ResultRender key={key} event={event} />;
           }
           // system / rate_limit_event: header-only, always shown.
           if (event.type === "system") {
