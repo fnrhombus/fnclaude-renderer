@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/fnrhombus/fnclaude-renderer/compare/v1.0.0...v1.0.1) (2026-05-19)
+
+
+### Bug Fixes
+
+* **release:** bun install before bun build --compile ([#8](https://github.com/fnrhombus/fnclaude-renderer/issues/8)) ([0d2dbcf](https://github.com/fnrhombus/fnclaude-renderer/commit/0d2dbcf2182904f9a80a5d20db1980f1595dccae))
+
 ## 1.0.0 (2026-05-19)
 
 
