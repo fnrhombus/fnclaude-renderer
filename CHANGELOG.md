@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/fnrhombus/fnclaude-renderer/compare/v1.0.1...v1.0.2) (2026-05-19)
+
+
+### Bug Fixes
+
+* **release:** upload artifacts onto release-please's release entry ([#10](https://github.com/fnrhombus/fnclaude-renderer/issues/10)) ([7a33cba](https://github.com/fnrhombus/fnclaude-renderer/commit/7a33cbaa42411cdb5f6289a11df367cac12a213a))
+
 ## [1.0.1](https://github.com/fnrhombus/fnclaude-renderer/compare/v1.0.0...v1.0.1) (2026-05-19)
 
 
