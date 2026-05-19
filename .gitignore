@@ -1,9 +1,19 @@
-# Build artifacts (your build.yml fills this in — the directory shouldn't
-# be checked in).
-/dist/
+# Node / Bun
+node_modules/
+dist/
+bin/
+*.tsbuildinfo
+bun.lockb.backup
 
-# Editor / OS noise
-.DS_Store
-*.swp
+# IDE / editor
 .idea/
 .vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Test output
+coverage/
+*.test.snapshot

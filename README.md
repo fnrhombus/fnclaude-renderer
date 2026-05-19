@@ -1,121 +1,47 @@
-# aur-template
+# fnclaude-renderer
 
-A GitHub template for projects that publish to:
+Configurable TUI front-end for Claude Code. Bidirectional stream-json driver, repaint-on-toggle visibility filters (Alt+1-8), pretty markdown via [glow](https://github.com/charmbracelet/glow).
 
-- **GitHub releases** — versioned binaries / archives, attached to a tag
-- **The Arch User Repository** — `<project>-bin` PKGBUILD, pushed
-  automatically on every tagged release
+## Status
 
-The publishing chain is **language-agnostic**. The build step lives in a
-reusable workflow (`build.yml`) that you fill in for your language; the
-publish step doesn't care what produced the artifacts as long as they match
-the documented contract.
+Pre-v1. Active development. v0 ships the renderer in standalone wrapper mode — `fnclaude-renderer ...` spawns claude internally, renders the stream.
 
-## What you get
+## Goals
 
-Out of the box:
+- Replace the Claude Code CLI's fixed output with **verbosity presets** (quiet / normal / verbose / debug) and **per-element show/hide toggles**.
+- **Repaint past content on toggle** — flip a filter and previously-hidden content appears in place; previously-shown content collapses to a header. The transcript is a live view of the event log under the current filter.
+- Pipe assistant markdown through `glow` when available; raw fallback otherwise.
+- One persistent `claude` subprocess per session, driven via `--input-format stream-json --output-format stream-json`. No `--resume`-per-turn latency.
 
-- `release-please` PR that opens automatically on every push to `main`, keeps
-  itself up to date based on conventional-commit messages, and auto-merges
-  once `test` is green.
-- On the merged release PR's tag push: cross-platform build (your code) →
-  GitHub release with artifacts → AUR PKGBUILD push (binary package).
-- `auto-merge.yml` that enables auto-merge on every non-draft PR, so the
-  release chain closes without human intervention.
-- Conventional-commits → semver bump, with rules documented in `CLAUDE.md`.
+## Install
 
-## Use it
+(TODO once v0 is tagged — AUR `fnclaude-renderer-bin`.)
 
-1. Click **Use this template** on GitHub (or `gh repo create
-   <new-name> --template fnrhombus/aur-template --public`).
-2. Follow `BURN-AFTER-READING.md` for the one-time setup (secrets, repo
-   settings, AUR account / key, customizing placeholders).
-3. Fill in `.github/workflows/build.yml` and `.github/workflows/test.yml`.
-4. Commit a `feat:` change. The first release ships itself.
+## Keybinds
 
-## The contract between publish and build
+| Keybind | Element toggled |
+|---|---|
+| `Alt+1` | `thinking` blocks |
+| `Alt+2` | `Bash.input` (commands) |
+| `Alt+3` | `Bash.output` |
+| `Alt+4` | `Edit.diff` |
+| `Alt+5` | `Read.content` |
+| `Alt+6` | `Write.content` |
+| `Alt+7` | `Task.nested` (subagent prompts) |
+| `Alt+8` | `errors` |
+| `Alt+0` / `Alt+9` | cycle preset forward / backward |
+| `Ctrl+L` | force repaint |
+| `Ctrl+D` | clean exit |
 
-`release.yml` (publish, agnostic) calls `build.yml` (you fill in) as a
-reusable workflow when a tag is pushed. The contract:
+See [docs/keybind-spec.md](docs/keybind-spec.md) for terminal-specific caveats (especially macOS Terminal.app's Option/Meta handling).
 
-**Inputs to `build.yml`:**
+## Architecture
 
-- `version` (string) — the pushed tag, e.g. `v1.2.3`.
+- [docs/stream-json-findings.md](docs/stream-json-findings.md) — empirical notes on `claude`'s stream-json mode (what works, what's a footgun).
+- [docs/event-spec.md](docs/event-spec.md) — the typed event contract between the process driver and the UI.
+- [docs/filter-state-spec.md](docs/filter-state-spec.md) — verbosity presets, per-element override mechanics, repaint semantics.
+- [docs/keybind-spec.md](docs/keybind-spec.md) — Alt+1-8 mapping, terminal caveats.
 
-**Outputs (via workflow artifact upload):**
+## License
 
-- A single artifact named `dist` containing:
-  - Per-platform archives — names matching the `source_*` URLs in
-    `packaging/aur/PKGBUILD`. Conventional pattern:
-    `<project>_Linux_x86_64.tar.gz`, `<project>_Linux_arm64.tar.gz`,
-    `<project>_Darwin_x86_64.tar.gz`, `<project>_Windows_x86_64.zip`, etc.
-  - `checksums.txt` — sha256 sums in standard `sha256sum` format
-    (`<hash>  <filename>` per line).
-
-That's the entire contract. As long as `build.yml` produces this artifact,
-the publish chain works regardless of what language wrote the code.
-
-## Worked examples
-
-**Go (with goreleaser):**
-
-```yaml
-# .github/workflows/build.yml
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - uses: actions/setup-go@v5
-        with: { go-version-file: go.mod, cache: true }
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: release --clean --skip=publish
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
-```
-
-**Rust (cargo-dist, single-platform shown):**
-
-```yaml
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --release
-      - run: |
-          mkdir -p dist
-          tar czf dist/<project>_Linux_x86_64.tar.gz -C target/release <project>
-          (cd dist && sha256sum *.tar.gz > checksums.txt)
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
-```
-
-## Workflow files
-
-| File | Role | Language-agnostic? |
-|---|---|---|
-| `release-please.yml` | Opens / maintains the release PR on every push to `main` | ✅ |
-| `release.yml` | Orchestrator: build → GitHub release → AUR push, on tag | ✅ (orchestrator only) |
-| `build.yml` | **You fill this in.** Produces `dist/` artifact | ❌ (language-specific) |
-| `test.yml` | **You fill this in.** Produces the `test` status check | ❌ (language-specific) |
-| `auto-merge.yml` | Enables auto-merge on non-draft PRs | ✅ |
-
-## See also
-
-- `BURN-AFTER-READING.md` — one-time setup checklist (delete after running)
-- `CLAUDE.md` — conventions / discipline (branch policy, TDD, commit
-  conventions)
-- `packaging/aur/PKGBUILD` — your AUR package definition
-- `release-please-config.json` — conventional-commits → version bump rules
+MIT.

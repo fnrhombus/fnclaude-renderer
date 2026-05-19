@@ -1,50 +1,19 @@
-# Working on this project
+# Working on fnclaude-renderer
 
-## Branch and worktree workflow — HARD RULE
+## Branch policy — HARD RULE
 
-**No direct commits to `main`.** All changes land via PR from a feature
-branch + worktree. `main` is (or should be) protected; even the maintainer
-goes through the PR flow.
-
-For every change, create a worktree:
-
-```sh
-git worktree add ../<repo>+<feature-name> -b <feature-name>
-cd ../<repo>+<feature-name>
-# … work, commit, push the branch …
-gh pr create --fill
-```
-
-When the PR merges, **clean up immediately** in the same shell session:
-
-```sh
-cd <main-worktree>
-git pull --ff-only
-git worktree remove ../<repo>+<feature-name>
-git branch -d <feature-name>
-git push origin :<feature-name>   # only if you pushed the branch
-```
-
-Dangling feature branches or stray worktrees are smells — start a new
-worktree when you need one, don't accumulate them "just in case".
+**No direct commits to `main`.** All changes land via PR from a feature branch — `main` is protected, even the maintainer goes through the PR flow. Worktree mechanics, branch/PR cleanup, and templated paths are governed by `~/.claude/CLAUDE.git.md`. Don't restate them here.
 
 ## Release flow
 
-This repo uses [release-please](https://github.com/googleapis/release-please).
+This repo uses [release-please](https://github.com/googleapis/release-please), shape mirrors fnclaude:
 
-- Every push to `main` (necessarily via PR merge — see above) triggers the
-  `Release Please` workflow.
-- release-please keeps an open `chore(main): release vX.Y.Z` PR continuously
-  up to date with the proposed next version and an auto-generated
-  `CHANGELOG.md` derived from conventional-commit messages.
-- That PR **auto-merges** once `test` is green (configured in
-  `.github/workflows/auto-merge.yml`). You don't manually merge it.
-- The release-please merge tags `vX.Y.Z`. The `release.yml` workflow fires
-  on the tag → `build.yml` produces `dist/` → `gh-release` uploads to a
-  GitHub release → `publish-aur` pushes the new PKGBUILD to AUR.
+- Every push to `main` (via PR merge) triggers `Release Please`.
+- release-please keeps an open `chore(main): release vX.Y.Z` PR continuously up to date with the proposed next version and auto-generated `CHANGELOG.md` derived from conventional commits.
+- That PR **auto-merges** once `test` is green (`.github/workflows/release-please.yml`). You don't manually merge it.
+- The release-please merge tags `vX.Y.Z`. The `release.yml` workflow fires on the tag, cross-builds binaries with `bun build --compile`, and the `publish-aur` job pushes the version bump to AUR.
 
-Effectively: every PR merge to `main` ships a release. There's no "save up
-a few commits then release" intermediate state — `main` is always shipped.
+Effectively: every PR merge to `main` ships a release.
 
 ### Version bump rules (conventional commits)
 
@@ -53,51 +22,51 @@ a few commits then release" intermediate state — `main` is always shipped.
 | `feat:` | minor (0.X.0) | yes |
 | `fix:` | patch (0.0.X) | yes |
 | `feat!:` or `BREAKING CHANGE:` in body | major (X.0.0) | yes |
-| `docs:`, `refactor:`, `perf:`, `revert:` | none | yes |
-| `chore:`, `ci:`, `build:`, `test:` | none | hidden |
+| `perf:`, `revert:` | patch (0.0.X) | yes |
+| `docs:`, `refactor:`, `chore:`, `ci:`, `build:`, `test:` | none | hidden |
+
+`docs:` / `refactor:` are `"hidden": true` in `release-please-config.json` so docs-only PRs don't cut releases.
 
 ## Test-driven changes — HARD RULE
 
-**Every fix or feature PR must include a test that would fail without the
-code change.**
+**Every fix or feature PR must include a test that would fail without the code change.**
 
-Auto-merge is enabled on every non-draft PR (`.github/workflows/auto-merge.yml`);
-it fires the moment the `test` status check is green. Without TDD, a PR can
-land before any test captures the bug behavior — which means future
-regressions slip in silently. TDD is what closes that loop.
+Auto-merge fires the moment `test` is green; without TDD, regressions slip in silently.
 
-The workflow:
-
-1. **Write the failing test first**, against the broken state. Run your
-   test command. Confirm it fails — and that the failure message points
-   at the bug, not an unrelated assertion.
+1. **Write the failing test first** against the broken state. Run `bun test`. Confirm it fails — and that the failure points at the bug, not an unrelated assertion.
 2. **Write the minimum code to make it pass.** Re-run. Confirm green.
-3. **Sanity check** before pushing: stash your code change, re-run the
-   test, watch it fail. Pop the stash, re-run, watch it pass. If the test
-   passes both ways, the test isn't actually catching what you fixed —
-   rewrite it.
-
-```sh
-git stash --keep-index -- <your-code-files>
-<test command>    # the new test should FAIL here
-git stash pop
-<test command>    # and pass here
-```
+3. **Sanity check** before pushing: stash your code change, re-run the test, watch it fail. Pop the stash, re-run, watch it pass. If the test passes both ways, it isn't catching what you fixed — rewrite it.
 
 When TDD is impractical, prefix the commit explicitly to opt out:
 
 - `docs:` — markdown / comments / inline docstrings, no behavior change
-- `ci:` / `build:` — workflows, packaging that aren't unit-testable
+- `ci:` / `build:` — workflows, mise tasks, packaging
 - `refactor:` — pure restructuring with no observable behavior change
-  (the existing test suite is your safety net)
 
-For `feat:`, `fix:`, `perf:` — TDD is non-negotiable. PR description
-should call out which test would have failed pre-fix.
+For `feat:`, `fix:`, `perf:` — TDD is non-negotiable.
 
 ## Commit conventions
 
-- **Format:** `<type>(<scope>): <subject>` per
-  [conventional commits](https://www.conventionalcommits.org/). Subject
-  under ~70 chars; body explains the *why*.
-- **No `--no-verify`** to bypass pre-commit hooks. If a hook fails,
-  investigate and fix the underlying issue.
+- **Format:** `<type>(<scope>): <subject>` per [conventional commits](https://www.conventionalcommits.org/). Subject under ~70 chars; body explains the *why*. Release-please depends on this.
+- **Author:** `fnrhombus`, email `2511516+fnrhombus@users.noreply.github.com` (GitHub noreply, never the underlying gmail).
+- No Claude attribution anywhere — see `~/.claude/CLAUDE.md`.
+
+## Before committing — verify the hook is active
+
+The pre-commit hook runs `bun run check` (biome lint + format check). If `bun` or `biome` aren't on PATH the hook fails loudly. Before any `git commit` here:
+
+```sh
+command -v bun >/dev/null && echo "bun: $(which bun)" || echo "bun MISSING — run: eval \"\$(mise activate bash)\" (or zsh)"
+```
+
+`mise.toml`'s `[hooks] enter = "git config core.hooksPath .githooks"` auto-installs the hooks-path setting on `cd` for mise users. Non-mise users run that command once.
+
+## Layout
+
+- `src/` — TypeScript source
+- `src/types/events.ts` — stream-json event shapes (contract between the process driver and the UI)
+- `bin/` — compiled binaries (`bun build --compile`); gitignored
+- `docs/` — design + spec docs
+- `packaging/aur/` — PKGBUILD for `fnclaude-renderer-bin`
+- `.github/workflows/` — `test`, `release-please`, `release`, `auto-merge`
+- `mise.toml` — Bun pin + `[hooks] enter` for hook auto-install
