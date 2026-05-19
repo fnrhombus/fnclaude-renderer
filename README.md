@@ -15,7 +15,25 @@ Pre-v1. Active development. v0 ships the renderer in standalone wrapper mode —
 
 ## Install
 
-(TODO once v0 is tagged — AUR `fnclaude-renderer-bin`.)
+### Arch Linux (AUR)
+
+```sh
+yay -S fnclaude-renderer-bin
+```
+
+### Other platforms
+
+Download the pre-built binary for your platform from the [latest release](https://github.com/fnrhombus/fnclaude-renderer/releases/latest):
+
+- Linux x86_64 / arm64
+- macOS x86_64 (Intel) / arm64 (Apple Silicon)
+- Windows x86_64 / arm64
+
+Extract and place `fnclaude-renderer` on your `$PATH`.
+
+### Optional: glow
+
+[glow](https://github.com/charmbracelet/glow) renders assistant markdown with syntax highlighting. If it's on your `$PATH` it gets used automatically; otherwise raw markdown is shown.
 
 ## Keybinds
 
