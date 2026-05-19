@@ -1,0 +1,9 @@
+# Build artifacts (your build.yml fills this in — the directory shouldn't
+# be checked in).
+/dist/
+
+# Editor / OS noise
+.DS_Store
+*.swp
+.idea/
+.vscode/

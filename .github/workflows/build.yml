@@ -1,0 +1,61 @@
+name: build
+
+# STUB — fill this in for your language.
+#
+# Called by release.yml when a tag is pushed. Must produce a `dist/` directory
+# uploaded as a workflow artifact named `dist` containing:
+#
+#   - One archive per (os, arch) you want to ship, with names matching the
+#     `source_*` URLs in packaging/aur/PKGBUILD. Example for fnclaude-style
+#     conventions:
+#         <project>_Linux_x86_64.tar.gz
+#         <project>_Linux_arm64.tar.gz
+#         <project>_Darwin_x86_64.tar.gz
+#         <project>_Darwin_arm64.tar.gz
+#         <project>_Windows_x86_64.zip
+#         <project>_Windows_arm64.zip
+#
+#   - checksums.txt — sha256 sums of every archive, one per line, formatted
+#     as `<sha256>  <filename>` (the standard `sha256sum` output format).
+#
+# The AUR job's `updpkgsums: true` will re-fetch from the GitHub release URLs
+# and recompute sha256sums, so populating PKGBUILD's `sha256sums_*` from
+# checksums.txt isn't strictly required — but checksums.txt is still useful
+# for users verifying the GitHub release manually.
+#
+# Example fill-ins:
+#
+#   Go (with goreleaser):
+#     - uses: actions/setup-go@v5
+#     - uses: goreleaser/goreleaser-action@v6
+#       with:
+#         args: release --clean --skip=publish
+#     - uses: actions/upload-artifact@v4
+#       with: { name: dist, path: dist/ }
+#
+#   Rust (with cargo-dist or matrix):
+#     - matrix build per target, archive, sha256, upload as `dist`.
+#
+#   Node (binary CLI via pkg/nexe/bun build):
+#     - similar matrix build + archive + checksum + upload as `dist`.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+        description: "Release version (the pushed tag, e.g. v1.2.3)"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Not implemented
+        run: |
+          echo "::error::build.yml is a stub. Fill it in for your language."
+          echo "Required outputs:"
+          echo "  - workflow artifact named 'dist' containing release archives + checksums.txt"
+          echo "  - archive names must match packaging/aur/PKGBUILD source_* URLs"
+          echo "See the comment block at the top of .github/workflows/build.yml for details."
+          exit 1

@@ -1,0 +1,37 @@
+name: test
+
+# STUB — fill this in for your language.
+#
+# auto-merge.yml waits for a status check named `test`, and branch protection
+# on `main` should require it. Without a real test job, the auto-merge chain
+# never closes — release PRs sit open forever.
+#
+# `merge_group` is included so if you ever enable GitHub's merge queue, the
+# queue's speculative commit gets CI signal and PRs don't sit forever.
+#
+# Example fill-ins:
+#
+#   Go:        go test -race ./... ; gofmt -l ./src ; go vet ./...
+#   Rust:      cargo test ; cargo clippy -- -D warnings ; cargo fmt --check
+#   Node:      npm ci ; npm test ; npm run lint ; npm run typecheck
+#   Python:    uv sync ; uv run pytest ; uv run ruff check ; uv run mypy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Not implemented
+        run: |
+          echo "::error::test.yml is a stub. Fill it in for your language."
+          echo "auto-merge.yml waits on a status check named 'test', so this job"
+          echo "MUST exist and pass before any PR (including the release PR) can merge."
+          exit 1
