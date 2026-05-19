@@ -83,7 +83,7 @@ jobs:
           # (typically `<project>-bin` for binary releases). This must match
           # the AUR repo you've already created at
           # https://aur.archlinux.org/packages/<PKGNAME>.
-          pkgname: <PKGNAME>-bin
+          pkgname: fnclaude-renderer-bin
           pkgbuild: ./packaging/aur/PKGBUILD
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}

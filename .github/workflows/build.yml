@@ -1,43 +1,8 @@
 name: build
 
-# STUB — fill this in for your language.
-#
-# Called by release.yml when a tag is pushed. Must produce a `dist/` directory
-# uploaded as a workflow artifact named `dist` containing:
-#
-#   - One archive per (os, arch) you want to ship, with names matching the
-#     `source_*` URLs in packaging/aur/PKGBUILD. Example for fnclaude-style
-#     conventions:
-#         <project>_Linux_x86_64.tar.gz
-#         <project>_Linux_arm64.tar.gz
-#         <project>_Darwin_x86_64.tar.gz
-#         <project>_Darwin_arm64.tar.gz
-#         <project>_Windows_x86_64.zip
-#         <project>_Windows_arm64.zip
-#
-#   - checksums.txt — sha256 sums of every archive, one per line, formatted
-#     as `<sha256>  <filename>` (the standard `sha256sum` output format).
-#
-# The AUR job's `updpkgsums: true` will re-fetch from the GitHub release URLs
-# and recompute sha256sums, so populating PKGBUILD's `sha256sums_*` from
-# checksums.txt isn't strictly required — but checksums.txt is still useful
-# for users verifying the GitHub release manually.
-#
-# Example fill-ins:
-#
-#   Go (with goreleaser):
-#     - uses: actions/setup-go@v5
-#     - uses: goreleaser/goreleaser-action@v6
-#       with:
-#         args: release --clean --skip=publish
-#     - uses: actions/upload-artifact@v4
-#       with: { name: dist, path: dist/ }
-#
-#   Rust (with cargo-dist or matrix):
-#     - matrix build per target, archive, sha256, upload as `dist`.
-#
-#   Node (binary CLI via pkg/nexe/bun build):
-#     - similar matrix build + archive + checksum + upload as `dist`.
+# Reusable workflow: called by release.yml on tag push.
+# Produces a `dist` artifact containing per-platform archives + checksums.txt.
+# Archive names match the source_* URLs in packaging/aur/PKGBUILD.
 
 on:
   workflow_call:
@@ -49,13 +14,102 @@ on:
 
 jobs:
   build:
+    name: build ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: bun-linux-x64
+            os_name: Linux
+            arch_name: x86_64
+            archive_ext: tar.gz
+          - target: bun-linux-arm64
+            os_name: Linux
+            arch_name: arm64
+            archive_ext: tar.gz
+          - target: bun-darwin-x64
+            os_name: Darwin
+            arch_name: x86_64
+            archive_ext: tar.gz
+          - target: bun-darwin-arm64
+            os_name: Darwin
+            arch_name: arm64
+            archive_ext: tar.gz
+          - target: bun-windows-x64
+            os_name: Windows
+            arch_name: x86_64
+            archive_ext: zip
+          - target: bun-windows-arm64
+            os_name: Windows
+            arch_name: arm64
+            archive_ext: zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build binary
+        env:
+          TARGET: ${{ matrix.target }}
+          OS_NAME: ${{ matrix.os_name }}
+          ARCH_NAME: ${{ matrix.arch_name }}
+        run: |
+          set -euo pipefail
+          OUTFILE="fnclaude-renderer"
+          if [[ "$OS_NAME" == "Windows" ]]; then
+            OUTFILE="fnclaude-renderer.exe"
+          fi
+          bun build --compile \
+            --target="$TARGET" \
+            --outfile="$OUTFILE" \
+            ./src/index.tsx
+
+      - name: Archive
+        id: archive
+        env:
+          OS_NAME: ${{ matrix.os_name }}
+          ARCH_NAME: ${{ matrix.arch_name }}
+          EXT: ${{ matrix.archive_ext }}
+        run: |
+          set -euo pipefail
+          ARCHIVE="fnclaude-renderer_${OS_NAME}_${ARCH_NAME}.${EXT}"
+          if [[ "$EXT" == "zip" ]]; then
+            zip "$ARCHIVE" fnclaude-renderer.exe
+          else
+            tar -czf "$ARCHIVE" fnclaude-renderer
+          fi
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archive-${{ matrix.os_name }}-${{ matrix.arch_name }}
+          path: ${{ steps.archive.outputs.archive }}
+          retention-days: 1
+
+  assemble:
+    name: assemble dist
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Not implemented
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: archive-*
+          path: dist/
+          merge-multiple: true
+
+      - name: Generate checksums
         run: |
-          echo "::error::build.yml is a stub. Fill it in for your language."
-          echo "Required outputs:"
-          echo "  - workflow artifact named 'dist' containing release archives + checksums.txt"
-          echo "  - archive names must match packaging/aur/PKGBUILD source_* URLs"
-          echo "See the comment block at the top of .github/workflows/build.yml for details."
-          exit 1
+          set -euo pipefail
+          cd dist
+          sha256sum fnclaude-renderer_*.tar.gz fnclaude-renderer_*.zip > checksums.txt
+          cat checksums.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 1
